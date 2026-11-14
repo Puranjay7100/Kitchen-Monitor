@@ -22,7 +22,7 @@ from psycopg2 import pool
 import boto3
 from botocore.config import Config
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -157,6 +157,8 @@ class VisionManager:
         self.last_saved = {}
         self.fps = 0.0
         self.error_message: Optional[str] = None
+        self.client_frame_count = 0
+        self.client_start_time = time.time()
 
     def _create_initial_frame(self):
         try:
@@ -222,6 +224,73 @@ class VisionManager:
     def set_confidence(self, conf: float):
         with self.lock:
             self.confidence = max(0.05, min(1.0, conf))
+
+    def process_client_frame(self, frame, conf=None):
+        if conf is None:
+            conf = self.confidence
+        yolo_model = get_model()
+        current_detected = []
+
+        if yolo_model is not None and frame is not None:
+            try:
+                results = yolo_model.predict(frame, conf=conf, verbose=False)
+                for result in results:
+                    for box in result.boxes:
+                        class_id = int(box.cls[0])
+                        name = yolo_model.names.get(class_id, f"class_{class_id}")
+                        score = float(box.conf[0])
+
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        is_violation = (name in VIOLATIONS)
+                        color = (0, 0, 255) if is_violation else (0, 255, 0)
+
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        display_name = {
+                            "no_apron": "No Apron",
+                            "no_hairnet": "No Hairnet",
+                            "no_gloves": "No Gloves",
+                            "apron": "Apron",
+                            "hairnet": "Hairnet",
+                            "gloves": "Gloves"
+                        }.get(name, name.replace("_", " ").title())
+                        label = f"{display_name}: {score:.2f}"
+                        cv2.putText(
+                            frame,
+                            label,
+                            (x1, max(22, y1 - 10)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            color,
+                            2
+                        )
+
+                        if is_violation:
+                            current_detected.append(name)
+                            now = time.time()
+                            if now - self.last_saved.get(name, 0) >= 10:
+                                self._save_violation_record(name, score, frame)
+                                self.last_saved[name] = now
+            except Exception as infer_err:
+                print(f"Inference error: {infer_err}")
+
+        with self.lock:
+            self.active_violations = sorted(list(set(current_detected)))
+            self.running = True
+
+        now = time.time()
+        self.client_frame_count += 1
+        elapsed = now - self.client_start_time
+        if elapsed >= 1.0:
+            self.fps = self.client_frame_count / elapsed
+            self.client_frame_count = 0
+            self.client_start_time = now
+
+        ret_encode, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        jpeg_bytes = buffer.tobytes() if ret_encode else b""
+        with self.lock:
+            self.current_frame = jpeg_bytes
+
+        return jpeg_bytes, self.active_violations, self.fps
 
     def _upload_and_save_violation(self, name: str, confidence: float, frame_copy):
         try:
@@ -548,6 +617,27 @@ async def api_stop():
 async def api_set_confidence(req: ConfRequest):
     vision.set_confidence(req.confidence)
     return {"status": "ok", "confidence": vision.confidence}
+
+@app.post("/api/process_frame")
+async def api_process_frame(request: Request, conf: float = 0.50):
+    body = await request.body()
+    if not body:
+        return Response(status_code=400, content=b"Empty frame")
+
+    nparr = np.frombuffer(body, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if frame is None:
+        return Response(status_code=400, content=b"Invalid image format")
+
+    annotated_jpeg, detected, fps = vision.process_client_frame(frame, conf=conf)
+    return Response(
+        content=annotated_jpeg,
+        media_type="image/jpeg",
+        headers={
+            "X-FPS": f"{fps:.1f}",
+            "X-Violations": ",".join(detected)
+        }
+    )
 
 # In-memory cache for status statistics to avoid repetitive remote Supabase queries
 _status_cache = None

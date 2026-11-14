@@ -136,6 +136,120 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  // Local Browser Webcam Streaming Controller (for Render cloud & local devices)
+  let clientWebcamStream = null;
+  let clientWebcamVideo = null;
+  let clientProcessingLoop = null;
+  let isSendingFrame = false;
+  let isUsingClientCamera = false;
+
+  async function startLocalWebcamMonitoring() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return false;
+    }
+
+    try {
+      showToast('Requesting camera permission...');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        },
+        audio: false
+      });
+      clientWebcamStream = stream;
+      isUsingClientCamera = true;
+
+      if (!clientWebcamVideo) {
+        clientWebcamVideo = document.createElement('video');
+        clientWebcamVideo.setAttribute('playsinline', '');
+        clientWebcamVideo.setAttribute('autoplay', '');
+        clientWebcamVideo.muted = true;
+      }
+      clientWebcamVideo.srcObject = stream;
+      await clientWebcamVideo.play();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+
+      setMonitoringActive(true);
+      showToast('Camera Connected! Live AI Inspection Running');
+
+      if (streamConnectionBadge) {
+        streamConnectionBadge.textContent = 'Camera Live';
+        streamConnectionBadge.style.color = '#10b981';
+      }
+
+      clientProcessingLoop = setInterval(() => {
+        if (!isMonitoring || isSendingFrame) return;
+        if (!clientWebcamVideo || clientWebcamVideo.readyState < 2) return;
+
+        isSendingFrame = true;
+        try {
+          ctx.drawImage(clientWebcamVideo, 0, 0, 640, 480);
+          canvas.toBlob(async (blob) => {
+            if (!blob || !isMonitoring) {
+              isSendingFrame = false;
+              return;
+            }
+            try {
+              const currentConf = confSlider ? parseFloat(confSlider.value) : 0.50;
+              const res = await fetch(getApiUrl(`/api/process_frame?conf=${currentConf}`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'image/jpeg' },
+                body: blob
+              });
+              if (res.ok) {
+                const imgBlob = await res.blob();
+                if (videoStream && isMonitoring) {
+                  const oldUrl = videoStream.src;
+                  videoStream.src = URL.createObjectURL(imgBlob);
+                  if (oldUrl && oldUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(oldUrl);
+                  }
+                }
+                const fpsHeader = res.headers.get('X-FPS');
+                if (fpsHeader && videoFps) {
+                  videoFps.textContent = `FPS: ${fpsHeader}`;
+                }
+              }
+            } catch (err) {
+              // Frame transport catch
+            } finally {
+              isSendingFrame = false;
+            }
+          }, 'image/jpeg', 0.75);
+        } catch (e) {
+          isSendingFrame = false;
+        }
+      }, 75); // ~13 FPS live stream
+
+      return true;
+    } catch (err) {
+      console.warn('Webcam permission denied or unavailable:', err);
+      return false;
+    }
+  }
+
+  function stopLocalWebcamMonitoring() {
+    if (clientProcessingLoop) {
+      clearInterval(clientProcessingLoop);
+      clientProcessingLoop = null;
+    }
+    if (clientWebcamStream) {
+      clientWebcamStream.getTracks().forEach(track => track.stop());
+      clientWebcamStream = null;
+    }
+    if (clientWebcamVideo) {
+      clientWebcamVideo.srcObject = null;
+    }
+    isSendingFrame = false;
+    isUsingClientCamera = false;
+  }
+
   // Confidence Slider
   if (confSlider) {
     confSlider.addEventListener('input', () => {
@@ -150,9 +264,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Start Monitoring (Auto-detects any available camera)
+  // Start Monitoring (Requests local camera permission; falls back to cloud stream if unavailable)
   if (btnStartMonitor) {
     btnStartMonitor.addEventListener('click', async () => {
+      // 1. First, attempt to request native camera permission from user's device
+      const cameraStarted = await startLocalWebcamMonitoring();
+      if (cameraStarted) {
+        return;
+      }
+
+      // 2. If camera denied or unavailable, start server auto-stream
       const source = 'auto';
       const confidence = confSlider ? parseFloat(confSlider.value) : 0.50;
 
@@ -184,6 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Stop Monitoring
   if (btnStopMonitor) {
     btnStopMonitor.addEventListener('click', async () => {
+      stopLocalWebcamMonitoring();
       try {
         await fetch(getApiUrl('/api/stop'), { method: 'POST' });
       } catch (err) {
@@ -203,10 +325,12 @@ document.addEventListener('DOMContentLoaded', () => {
         videoStream.classList.add('active');
         videoStream.style.objectFit = 'contain';
         videoStream.style.padding = '0';
-        if (backendOnline) {
-          videoStream.src = getApiUrl('/video_feed?t=' + Date.now());
-        } else {
-          startClientFallbackStream();
+        if (!isUsingClientCamera) {
+          if (backendOnline) {
+            videoStream.src = getApiUrl('/video_feed?t=' + Date.now());
+          } else {
+            startClientFallbackStream();
+          }
         }
       }
 
@@ -222,6 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnStopMonitor.style.opacity = '1';
       }
     } else {
+      stopLocalWebcamMonitoring();
       stopClientFallbackStream();
       if (videoStream) {
         videoStream.classList.remove('active');
