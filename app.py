@@ -32,16 +32,17 @@ import uvicorn
 # Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "best_40.onnx")
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.lgqdpkkxvzghbrbieyct:The_Neotia_University@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
-)
 
-# Supabase S3 Storage Configuration
-S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "https://lgqdpkkxvzghbrbieyct.storage.supabase.co/storage/v1/s3")
+# Supabase PostgreSQL Database URL (loaded from Render Environment Variables or local .env)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("Missing required environment variable: DATABASE_URL")
+
+# Supabase S3 Storage Configuration (loaded from Render Environment Variables or local .env)
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 S3_REGION = os.getenv("S3_REGION", "ap-northeast-2")
-S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "f85b8011a97b4e90b4781e5eb6ef1f51")
-S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY", "e445ceadcb8a879fd2ce2cd90ca9e946e5b8f3eed40b41a5daabbff67dc42a7a")
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "Evidence")
 SUPABASE_STORAGE_PUBLIC_URL = os.getenv(
     "SUPABASE_STORAGE_PUBLIC_URL",
