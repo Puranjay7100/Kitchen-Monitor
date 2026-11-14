@@ -402,10 +402,10 @@ body {
 }
 
 .status-pill.violation {
-  background-color: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-  animation: pulse-red 1.5s infinite;
+  background-color: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  animation: none;
 }
 
 /* Stats Row */

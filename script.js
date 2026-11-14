@@ -602,10 +602,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeViolations = data.active_violations || [];
     if (statActiveViolations) statActiveViolations.textContent = activeViolations.length;
 
-    if (activeViolations.length > 0) {
-      if (monitorStatusBadge) monitorStatusBadge.className = 'status-pill violation';
-      if (navPulse) navPulse.className = 'live-pulse danger';
-    } else if (data.running) {
+    if (isMonitoring || data.running) {
       if (monitorStatusBadge) monitorStatusBadge.className = 'status-pill running';
       if (navPulse) navPulse.className = 'live-pulse';
     } else {
