@@ -428,6 +428,27 @@ class VisionManager:
 
 vision = VisionManager()
 
+def ensure_sample_evidence_frames():
+    os.makedirs(EVIDENCE_DIR, exist_ok=True)
+    existing = glob.glob(os.path.join(EVIDENCE_DIR, "*.jpg"))
+    if len(existing) < 5:
+        print("[STORAGE] Local evidence folder empty. Syncing sample kitchen frames from Supabase...")
+        try:
+            res = s3_client.list_objects_v2(Bucket=S3_BUCKET_NAME, MaxKeys=30)
+            count = 0
+            for obj in res.get("Contents", []):
+                key = obj["Key"]
+                if key.endswith(".jpg"):
+                    target_file = os.path.join(EVIDENCE_DIR, os.path.basename(key))
+                    if not os.path.exists(target_file):
+                        s3_client.download_file(S3_BUCKET_NAME, key, target_file)
+                        count += 1
+                        if count >= 15:
+                            break
+            print(f"[STORAGE] Synced {count} frames from Supabase Storage into local cache.")
+        except Exception as e:
+            print(f"[STORAGE WARNING] Could not sync frames from Supabase: {e}")
+
 # FastAPI application
 app = FastAPI(title="Kitchen Hygiene Compliance Monitoring - Mother's Hut")
 
@@ -435,6 +456,7 @@ app = FastAPI(title="Kitchen Hygiene Compliance Monitoring - Mother's Hut")
 async def on_startup():
     print("[STARTUP] Pre-warming YOLO AI Model in background...")
     threading.Thread(target=get_model, daemon=True).start()
+    threading.Thread(target=ensure_sample_evidence_frames, daemon=True).start()
 
 app.add_middleware(
     CORSMiddleware,
@@ -452,8 +474,8 @@ async def get_evidence_image(filename: str):
         return FileResponse(local_path)
     return RedirectResponse(f"{SUPABASE_STORAGE_PUBLIC_URL}/{filename}")
 
-# Serve Root HTML and CSS/JS
-@app.get("/")
+# Serve Root HTML and CSS/JS (supports GET and HEAD for Render health checks)
+@app.api_route("/", methods=["GET", "HEAD"])
 async def get_index():
     return FileResponse("index.html")
 
@@ -644,7 +666,8 @@ if __name__ == "__main__":
 
     print("\n" + "="*60)
     print(" Kitchen Hygiene Compliance Monitoring - Mother's Hut")
-    print(f" Local (PC):   http://127.0.0.1:8000")
-    print(f" Mobile / LAN: http://{local_ip}:8000")
+    port = int(os.getenv("PORT", 8000))
+    print(f" Local (PC):   http://127.0.0.1:{port}")
+    print(f" Mobile / LAN: http://{local_ip}:{port}")
     print("="*60 + "\n")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
