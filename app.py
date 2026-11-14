@@ -31,7 +31,7 @@ import uvicorn
 
 # Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "best_40.pt")
+MODEL_PATH = os.path.join(BASE_DIR, "best_40.onnx")
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres.lgqdpkkxvzghbrbieyct:The_Neotia_University@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
@@ -124,7 +124,59 @@ def setup_database():
 
 setup_database()
 
-# Global model holder (lazy-loaded on start)
+# Global ONNX model holder (ultra-low memory <90MB RAM)
+class ONNXYOLODetector:
+    def __init__(self, onnx_path):
+        import onnxruntime as ort
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self.session = ort.InferenceSession(onnx_path, opts, providers=["CPUExecutionProvider"])
+        self.input_name = self.session.get_inputs()[0].name
+        self.names = {0: "apron", 1: "gloves", 2: "hairnet", 3: "no_apron", 4: "no_gloves", 5: "no_hairnet"}
+
+    def detect(self, img0, conf=0.5, iou_thresh=0.45):
+        h0, w0 = img0.shape[:2]
+        # Fast resize to 320x320 matching export resolution
+        img = cv2.resize(img0, (320, 320))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        img = np.transpose(img, (2, 0, 1))[None, :]
+
+        outputs = self.session.run(None, {self.input_name: img})[0]
+        preds = np.transpose(outputs[0], (1, 0)) # (2100, 10)
+
+        boxes, confs, clss = [], [], []
+        x_scale, y_scale = w0 / 320.0, h0 / 320.0
+
+        for row in preds:
+            cx, cy, w, h = row[:4]
+            scores = row[4:]
+            cls_id = int(np.argmax(scores))
+            score_val = float(scores[cls_id])
+            if score_val >= conf:
+                boxes.append([
+                    int((cx - w / 2) * x_scale),
+                    int((cy - h / 2) * y_scale),
+                    int(w * x_scale),
+                    int(h * y_scale)
+                ])
+                confs.append(score_val)
+                clss.append(cls_id)
+
+        indices = cv2.dnn.NMSBoxes(boxes, confs, conf, iou_thresh)
+        results = []
+        if len(indices) > 0:
+            for idx in np.array(indices).flatten():
+                x, y, w, h = boxes[idx]
+                results.append({
+                    "class_id": clss[idx],
+                    "name": self.names.get(clss[idx], f"class_{clss[idx]}"),
+                    "conf": confs[idx],
+                    "box": [max(0, x), max(0, y), min(w0, x + w), min(h0, y + h)]
+                })
+        return results
+
 model = None
 model_lock = threading.Lock()
 
@@ -132,22 +184,20 @@ def get_model():
     global model
     with model_lock:
         if model is None:
-            print(f"[YOLO] Loading model from: {MODEL_PATH}", flush=True)
+            print(f"[YOLO ONNX] Loading model from: {MODEL_PATH}", flush=True)
             if not os.path.isfile(MODEL_PATH):
-                print(f"[YOLO ERROR] Model file not found at: {MODEL_PATH}", flush=True)
-                raise FileNotFoundError(f"YOLO model not found at: {MODEL_PATH}")
+                print(f"[YOLO ONNX ERROR] Model file not found at: {MODEL_PATH}", flush=True)
+                raise FileNotFoundError(f"ONNX model not found at: {MODEL_PATH}")
             try:
-                from ultralytics import YOLO
-                loaded = YOLO(MODEL_PATH)
-                # Verify CPU warmup inference
+                loaded = ONNXYOLODetector(MODEL_PATH)
+                # Verify warmup inference
                 dummy = np.zeros((320, 320, 3), dtype=np.uint8)
-                loaded.predict(dummy, imgsz=320, device="cpu", verbose=False)
+                loaded.detect(dummy, conf=0.25)
                 model = loaded
-                print(f"[YOLO] MODEL LOADED SUCCESSFULLY", flush=True)
-                print(f"[YOLO] CLASSES: {model.names}", flush=True)
+                print(f"[YOLO ONNX] MODEL LOADED SUCCESSFULLY (Ultra-Low Memory Mode)", flush=True)
+                print(f"[YOLO ONNX] CLASSES: {model.names}", flush=True)
             except Exception as e:
-                print(f"[YOLO LOAD EXCEPTION] Failed to load YOLO: {e}", flush=True)
-                # Do NOT permanently cache failure as False; leave as None so future requests can retry
+                print(f"[YOLO ONNX LOAD EXCEPTION] Failed to load ONNX: {e}", flush=True)
                 raise e
     return model
 
@@ -242,53 +292,51 @@ class VisionManager:
 
         if yolo_model is not None and frame is not None:
             try:
-                # Run YOLO CPU inference with explicit imgsz and conf
-                results = yolo_model.predict(frame, conf=conf, imgsz=416, device="cpu", verbose=False)
-                for result in results:
-                    for box in result.boxes:
-                        class_id = int(box.cls[0])
-                        name = yolo_model.names.get(class_id, f"class_{class_id}")
-                        score = float(box.conf[0])
+                # Fast ONNX CPU inference
+                detections = yolo_model.detect(frame, conf=conf)
+                for det in detections:
+                    name = det["name"]
+                    score = det["conf"]
+                    x1, y1, x2, y2 = det["box"]
 
-                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                        is_violation = (name in VIOLATIONS)
-                        color = (0, 0, 255) if is_violation else (0, 255, 0)
+                    is_violation = (name in VIOLATIONS)
+                    color = (0, 0, 255) if is_violation else (0, 255, 0)
 
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                        display_name = {
-                            "no_apron": "No Apron",
-                            "no_hairnet": "No Hairnet",
-                            "no_gloves": "No Gloves",
-                            "apron": "Apron",
-                            "hairnet": "Hairnet",
-                            "gloves": "Gloves"
-                        }.get(name, name.replace("_", " ").title())
-                        label = f"{display_name}: {score:.2f}"
-                        cv2.putText(
-                            frame,
-                            label,
-                            (x1, max(22, y1 - 10)),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6,
-                            color,
-                            2
-                        )
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                    display_name = {
+                        "no_apron": "No Apron",
+                        "no_hairnet": "No Hairnet",
+                        "no_gloves": "No Gloves",
+                        "apron": "Apron",
+                        "hairnet": "Hairnet",
+                        "gloves": "Gloves"
+                    }.get(name, name.replace("_", " ").title())
+                    label = f"{display_name}: {score:.2f}"
+                    cv2.putText(
+                        frame,
+                        label,
+                        (x1, max(22, y1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        color,
+                        2
+                    )
 
-                        boxes_data.append({
-                            "box": [x1, y1, x2, y2],
-                            "label": display_name,
-                            "score": round(score, 2),
-                            "violation": is_violation
-                        })
+                    boxes_data.append({
+                        "box": [x1, y1, x2, y2],
+                        "label": display_name,
+                        "score": round(score, 2),
+                        "violation": is_violation
+                    })
 
-                        if is_violation:
-                            current_detected.append(name)
-                            now = time.time()
-                            if now - self.last_saved.get(name, 0) >= 10:
-                                self._save_violation_record(name, score, frame)
-                                self.last_saved[name] = now
+                    if is_violation:
+                        current_detected.append(name)
+                        now = time.time()
+                        if now - self.last_saved.get(name, 0) >= 10:
+                            self._save_violation_record(name, score, frame)
+                            self.last_saved[name] = now
             except Exception as infer_err:
-                print(f"[YOLO INFERENCE ERROR] {repr(infer_err)}", flush=True)
+                print(f"[YOLO ONNX INFERENCE ERROR] {repr(infer_err)}", flush=True)
                 raise infer_err
 
         with self.lock:
@@ -441,46 +489,44 @@ class VisionManager:
 
                 current_detected = []
 
-                # YOLO inference
+                # ONNX YOLO inference
                 if yolo_model is not None and frame is not None:
                     try:
-                        results = yolo_model.predict(frame, conf=self.confidence, verbose=False)
-                        for result in results:
-                            for box in result.boxes:
-                                class_id = int(box.cls[0])
-                                name = yolo_model.names.get(class_id, f"class_{class_id}")
-                                score = float(box.conf[0])
+                        detections = yolo_model.detect(frame, conf=self.confidence)
+                        for det in detections:
+                            name = det["name"]
+                            score = det["conf"]
+                            x1, y1, x2, y2 = det["box"]
 
-                                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                                is_violation = (name in VIOLATIONS)
-                                color = (0, 0, 255) if is_violation else (0, 255, 0) # Red / Green
+                            is_violation = (name in VIOLATIONS)
+                            color = (0, 0, 255) if is_violation else (0, 255, 0) # Red / Green
 
-                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                                display_name = {
-                                    "no_apron": "No Apron",
-                                    "no_hairnet": "No Hairnet",
-                                    "no_gloves": "No Gloves",
-                                    "apron": "Apron",
-                                    "hairnet": "Hairnet",
-                                    "gloves": "Gloves"
-                                }.get(name, name.replace("_", " ").title())
-                                label = f"{display_name}: {score:.2f}"
-                                cv2.putText(
-                                    frame,
-                                    label,
-                                    (x1, max(22, y1 - 10)),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.6,
-                                    color,
-                                    2
-                                )
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                            display_name = {
+                                "no_apron": "No Apron",
+                                "no_hairnet": "No Hairnet",
+                                "no_gloves": "No Gloves",
+                                "apron": "Apron",
+                                "hairnet": "Hairnet",
+                                "gloves": "Gloves"
+                            }.get(name, name.replace("_", " ").title())
+                            label = f"{display_name}: {score:.2f}"
+                            cv2.putText(
+                                frame,
+                                label,
+                                (x1, max(22, y1 - 10)),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.6,
+                                color,
+                                2
+                            )
 
-                                if is_violation:
-                                    current_detected.append(name)
-                                    now = time.time()
-                                    if now - self.last_saved.get(name, 0) >= 10:
-                                        self._save_violation_record(name, score, frame)
-                                        self.last_saved[name] = now
+                            if is_violation:
+                                current_detected.append(name)
+                                now = time.time()
+                                if now - self.last_saved.get(name, 0) >= 10:
+                                    self._save_violation_record(name, score, frame)
+                                    self.last_saved[name] = now
                     except Exception as infer_err:
                         print(f"Inference error: {infer_err}")
 
