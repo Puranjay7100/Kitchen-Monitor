@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Video & Controls
   const videoStream = document.getElementById('video-stream');
+  const clientWebcamPreview = document.getElementById('client-webcam-preview');
+  const clientDetectionCanvas = document.getElementById('client-detection-canvas');
   const videoPlaceholder = document.getElementById('video-placeholder');
   const btnStartMonitor = document.getElementById('btn-start-monitor');
   const btnStopMonitor = document.getElementById('btn-stop-monitor');
@@ -138,10 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Local Browser Webcam Streaming Controller (for Render cloud & local devices)
   let clientWebcamStream = null;
-  let clientWebcamVideo = null;
   let clientProcessingLoop = null;
   let isSendingFrame = false;
   let isUsingClientCamera = false;
+  let offscreenCanvas = null;
+  let offscreenCtx = null;
 
   async function startLocalWebcamMonitoring() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -161,19 +164,25 @@ document.addEventListener('DOMContentLoaded', () => {
       clientWebcamStream = stream;
       isUsingClientCamera = true;
 
-      if (!clientWebcamVideo) {
-        clientWebcamVideo = document.createElement('video');
-        clientWebcamVideo.setAttribute('playsinline', '');
-        clientWebcamVideo.setAttribute('autoplay', '');
-        clientWebcamVideo.muted = true;
+      if (clientWebcamPreview) {
+        clientWebcamPreview.srcObject = stream;
+        clientWebcamPreview.style.display = 'block';
+        clientWebcamPreview.classList.add('active');
+        await clientWebcamPreview.play();
       }
-      clientWebcamVideo.srcObject = stream;
-      await clientWebcamVideo.play();
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
-      const ctx = canvas.getContext('2d');
+      if (clientDetectionCanvas) {
+        clientDetectionCanvas.style.display = 'block';
+        clientDetectionCanvas.width = 640;
+        clientDetectionCanvas.height = 480;
+      }
+
+      if (!offscreenCanvas) {
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = 640;
+        offscreenCanvas.height = 480;
+        offscreenCtx = offscreenCanvas.getContext('2d');
+      }
 
       setMonitoringActive(true);
       showToast('Camera Connected! Live AI Inspection Running');
@@ -183,14 +192,16 @@ document.addEventListener('DOMContentLoaded', () => {
         streamConnectionBadge.style.color = '#10b981';
       }
 
+      const overlayCtx = clientDetectionCanvas ? clientDetectionCanvas.getContext('2d') : null;
+
       clientProcessingLoop = setInterval(() => {
         if (!isMonitoring || isSendingFrame) return;
-        if (!clientWebcamVideo || clientWebcamVideo.readyState < 2) return;
+        if (!clientWebcamPreview || clientWebcamPreview.readyState < 2) return;
 
         isSendingFrame = true;
         try {
-          ctx.drawImage(clientWebcamVideo, 0, 0, 640, 480);
-          canvas.toBlob(async (blob) => {
+          offscreenCtx.drawImage(clientWebcamPreview, 0, 0, 640, 480);
+          offscreenCanvas.toBlob(async (blob) => {
             if (!blob || !isMonitoring) {
               isSendingFrame = false;
               return;
@@ -203,17 +214,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: blob
               });
               if (res.ok) {
-                const imgBlob = await res.blob();
-                if (videoStream && isMonitoring) {
-                  const oldUrl = videoStream.src;
-                  videoStream.src = URL.createObjectURL(imgBlob);
-                  if (oldUrl && oldUrl.startsWith('blob:')) {
-                    URL.revokeObjectURL(oldUrl);
-                  }
-                }
                 const fpsHeader = res.headers.get('X-FPS');
                 if (fpsHeader && videoFps) {
                   videoFps.textContent = `FPS: ${fpsHeader}`;
+                }
+
+                const violationsHeader = res.headers.get('X-Violations');
+                const boxesHeader = res.headers.get('X-Boxes');
+
+                if (boxesHeader && overlayCtx && clientDetectionCanvas) {
+                  try {
+                    const boxes = JSON.parse(boxesHeader);
+                    overlayCtx.clearRect(0, 0, clientDetectionCanvas.width, clientDetectionCanvas.height);
+                    boxes.forEach(item => {
+                      const [x1, y1, x2, y2] = item.box;
+                      const isViol = item.violation;
+                      const strokeColor = isViol ? '#ef4444' : '#10b981';
+                      overlayCtx.lineWidth = 2.5;
+                      overlayCtx.strokeStyle = strokeColor;
+                      overlayCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                      overlayCtx.fillStyle = strokeColor;
+                      overlayCtx.font = 'bold 13px Inter, sans-serif';
+                      const text = `${item.label}: ${item.score.toFixed(2)}`;
+                      const textWidth = overlayCtx.measureText(text).width;
+                      overlayCtx.fillRect(x1, Math.max(0, y1 - 20), textWidth + 8, 20);
+
+                      overlayCtx.fillStyle = '#ffffff';
+                      overlayCtx.fillText(text, x1 + 4, Math.max(14, y1 - 5));
+                    });
+                  } catch (e) {
+                    console.error('Error drawing bounding boxes:', e);
+                  }
                 }
               }
             } catch (err) {
@@ -221,11 +253,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
               isSendingFrame = false;
             }
-          }, 'image/jpeg', 0.75);
+          }, 'image/jpeg', 0.70);
         } catch (e) {
           isSendingFrame = false;
         }
-      }, 75); // ~13 FPS live stream
+      }, 100); // 10 FPS real-time YOLO analysis
 
       return true;
     } catch (err) {
@@ -243,8 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
       clientWebcamStream.getTracks().forEach(track => track.stop());
       clientWebcamStream = null;
     }
-    if (clientWebcamVideo) {
-      clientWebcamVideo.srcObject = null;
+    if (clientWebcamPreview) {
+      clientWebcamPreview.srcObject = null;
+      clientWebcamPreview.style.display = 'none';
+      clientWebcamPreview.classList.remove('active');
+    }
+    if (clientDetectionCanvas) {
+      clientDetectionCanvas.style.display = 'none';
+      const ctx = clientDetectionCanvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, clientDetectionCanvas.width, clientDetectionCanvas.height);
     }
     isSendingFrame = false;
     isUsingClientCamera = false;
@@ -321,16 +360,25 @@ document.addEventListener('DOMContentLoaded', () => {
     isMonitoring = active;
     if (active) {
       if (videoPlaceholder) videoPlaceholder.style.display = 'none';
-      if (videoStream) {
-        videoStream.classList.add('active');
-        videoStream.style.objectFit = 'contain';
-        videoStream.style.padding = '0';
-        if (!isUsingClientCamera) {
+      if (!isUsingClientCamera) {
+        if (clientWebcamPreview) clientWebcamPreview.style.display = 'none';
+        if (clientDetectionCanvas) clientDetectionCanvas.style.display = 'none';
+        if (videoStream) {
+          videoStream.style.display = 'block';
+          videoStream.classList.add('active');
+          videoStream.style.objectFit = 'contain';
+          videoStream.style.padding = '0';
           if (backendOnline) {
             videoStream.src = getApiUrl('/video_feed?t=' + Date.now());
           } else {
             startClientFallbackStream();
           }
+        }
+      } else {
+        if (videoStream) {
+          videoStream.style.display = 'none';
+          videoStream.classList.remove('active');
+          videoStream.src = '';
         }
       }
 

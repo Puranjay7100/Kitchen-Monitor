@@ -71,7 +71,9 @@
 
             <!-- Video Stream Area -->
             <div class="video-wrapper">
-              <!-- Active Stream Image from /video_feed -->
+              <!-- Active Stream Image from /video_feed or Local Canvas -->
+              <video id="client-webcam-preview" class="video-stream-img" playsinline autoplay muted style="display:none;"></video>
+              <canvas id="client-detection-canvas" class="video-detection-overlay" style="display:none;"></canvas>
               <img id="video-stream" class="video-stream-img" alt="Camera Stream">
               
               <!-- Placeholder when stopped -->

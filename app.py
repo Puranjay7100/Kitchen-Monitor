@@ -230,6 +230,7 @@ class VisionManager:
             conf = self.confidence
         yolo_model = get_model()
         current_detected = []
+        boxes_data = []
 
         if yolo_model is not None and frame is not None:
             try:
@@ -264,6 +265,13 @@ class VisionManager:
                             2
                         )
 
+                        boxes_data.append({
+                            "box": [x1, y1, x2, y2],
+                            "label": display_name,
+                            "score": round(score, 2),
+                            "violation": is_violation
+                        })
+
                         if is_violation:
                             current_detected.append(name)
                             now = time.time()
@@ -290,7 +298,7 @@ class VisionManager:
         with self.lock:
             self.current_frame = jpeg_bytes
 
-        return jpeg_bytes, self.active_violations, self.fps
+        return jpeg_bytes, self.active_violations, self.fps, boxes_data
 
     def _upload_and_save_violation(self, name: str, confidence: float, frame_copy):
         try:
@@ -629,13 +637,15 @@ async def api_process_frame(request: Request, conf: float = 0.50):
     if frame is None:
         return Response(status_code=400, content=b"Invalid image format")
 
-    annotated_jpeg, detected, fps = vision.process_client_frame(frame, conf=conf)
+    annotated_jpeg, detected, fps, boxes_data = vision.process_client_frame(frame, conf=conf)
     return Response(
         content=annotated_jpeg,
         media_type="image/jpeg",
         headers={
             "X-FPS": f"{fps:.1f}",
-            "X-Violations": ",".join(detected)
+            "X-Violations": ",".join(detected),
+            "X-Boxes": json.dumps(boxes_data),
+            "Access-Control-Expose-Headers": "X-FPS, X-Violations, X-Boxes"
         }
     )
 
