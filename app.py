@@ -542,6 +542,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Route for viewing violation photos (checks local cache first, redirects to Supabase Storage)
@@ -629,26 +630,34 @@ async def api_set_confidence(req: ConfRequest):
 
 @app.post("/api/process_frame")
 async def api_process_frame(request: Request, conf: float = 0.50):
-    body = await request.body()
-    if not body:
-        return Response(status_code=400, content=b"Empty frame")
+    try:
+        body = await request.body()
+        if not body:
+            return Response(status_code=400, content=b"Empty frame")
 
-    nparr = np.frombuffer(body, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if frame is None:
-        return Response(status_code=400, content=b"Invalid image format")
+        nparr = np.frombuffer(body, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return Response(status_code=400, content=b"Invalid image format")
 
-    annotated_jpeg, detected, fps, boxes_data = vision.process_client_frame(frame, conf=conf)
-    return Response(
-        content=annotated_jpeg,
-        media_type="image/jpeg",
-        headers={
-            "X-FPS": f"{fps:.1f}",
-            "X-Violations": ",".join(detected),
-            "X-Boxes": json.dumps(boxes_data),
-            "Access-Control-Expose-Headers": "X-FPS, X-Violations, X-Boxes"
-        }
-    )
+        annotated_jpeg, detected, fps, boxes_data = vision.process_client_frame(frame, conf=conf)
+        return Response(
+            content=annotated_jpeg,
+            media_type="image/jpeg",
+            headers={
+                "X-FPS": f"{fps:.1f}",
+                "X-Violations": ",".join(detected),
+                "X-Boxes": json.dumps(boxes_data),
+                "Access-Control-Expose-Headers": "X-FPS, X-Violations, X-Boxes"
+            }
+        )
+    except Exception as e:
+        print(f"[PROCESS FRAME ERROR] {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)},
+            headers={"Access-Control-Expose-Headers": "X-FPS, X-Violations, X-Boxes"}
+        )
 
 # In-memory cache for status statistics to avoid repetitive remote Supabase queries
 _status_cache = None

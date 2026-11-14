@@ -613,8 +613,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const wasOffline = !backendOnline;
         backendOnline = true;
         if (streamConnectionBadge) {
-          streamConnectionBadge.textContent = 'Connected';
-          streamConnectionBadge.style.color = '#10b981';
+          if (isUsingClientCamera) {
+            streamConnectionBadge.textContent = 'Camera Live';
+            streamConnectionBadge.style.color = '#10b981';
+          } else {
+            streamConnectionBadge.textContent = 'Connected';
+            streamConnectionBadge.style.color = '#10b981';
+          }
         }
 
         if (wasOffline && isMonitoring && data.running) {
@@ -624,9 +629,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        if (data.running && !isMonitoring) {
+        if (data.running && !isMonitoring && !isUsingClientCamera) {
           setMonitoringActive(true);
-        } else if (!data.running && isMonitoring) {
+        } else if (!data.running && isMonitoring && !isUsingClientCamera) {
           setMonitoringActive(false);
         }
 
