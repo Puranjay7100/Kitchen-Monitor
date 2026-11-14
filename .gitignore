@@ -1,0 +1,9 @@
+__pycache__
+.env
+mothershut.db
+run.bat
+best_60.pt
+best.pt
+app_streamlit.py
+/evidence
+evidence

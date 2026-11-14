@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kitchen Hygiene Compliance Monitoring - Mother's Hut</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="logo.png">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand" title="Mother's Hut">
+        <img src="logo.png" alt="Mother's Hut Logo" class="brand-logo">
+        <span class="brand-name">Mother's Hut</span>
+      </div>
+
+      <!-- Navigation Tabs: Live Monitoring & Violation History -->
+      <nav class="nav-right">
+        <div class="nav-tabs" role="tablist">
+          <button class="nav-tab active" id="nav-tab-monitor" data-tab="monitor" role="tab" aria-selected="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M23 7l-7 5 7 5V7z"></path>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+            <span>Live Monitoring</span>
+          </button>
+          <button class="nav-tab" id="nav-tab-history" data-tab="history" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>Violation History</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-wrapper">
+    
+    <!-- ========================================================
+         TAB 1: LIVE MONITORING
+         ======================================================== -->
+    <div class="tab-pane active" id="tab-pane-monitor">
+      
+      <!-- Monitoring Section (Two-Column: Video Feed & Recent Detections) -->
+      <section class="monitor-container">
+        
+        <div class="live-monitor-grid">
+
+          <!-- Left Column: Live Camera Feed & Controls -->
+          <div class="video-card">
+            <div class="video-card-header">
+              <div class="video-card-title-group">
+                <h3>Live Camera Feed</h3>
+                <span class="video-card-desc">Real-time YOLO inspection stream</span>
+              </div>
+
+              <div class="video-header-status-group">
+                <span id="stream-connection-badge" class="connection-status-text">Connecting...</span>
+                <div class="status-pill stopped" id="monitor-status-badge">
+                  <span class="live-pulse" id="monitor-status-dot"></span>
+                  <span id="monitor-status-text">STANDBY</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Video Stream Area -->
+            <div class="video-wrapper">
+              <!-- Active Stream Image from /video_feed -->
+              <img id="video-stream" class="video-stream-img" alt="Camera Stream">
+              
+              <!-- Placeholder when stopped -->
+              <div id="video-placeholder" class="video-placeholder">
+                <div class="video-placeholder-icon">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 7l-7 5 7 5V7z"></path>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                  </svg>
+                </div>
+                <h4 style="color: #f1f5f9; font-weight: 600; font-size: 1.05rem;">Camera Inactive</h4>
+                <p style="font-size: 0.85rem; max-width: 360px; color: #94a3b8;">
+                  Click <strong>Start Monitoring</strong> to launch live AI inspection on available camera.
+                </p>
+              </div>
+
+              <!-- FPS Overlay -->
+              <div class="video-overlay-fps" id="video-fps">FPS: --</div>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="controls-panel">
+              <div class="control-row">
+                <!-- In place of Camera Source: Start & Stop Monitoring Buttons -->
+                <div class="button-group control-btn-group">
+                  <button class="btn btn-primary" id="btn-start-monitor">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    Start Monitoring
+                  </button>
+                  <button class="btn btn-danger" id="btn-stop-monitor">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="6" y="6" width="12" height="12"></rect>
+                    </svg>
+                    Stop Monitoring
+                  </button>
+                </div>
+
+                <!-- Detection Confidence -->
+                <div class="control-group conf-slider-group">
+                  <div class="control-label">
+                    <span>Detection Confidence</span>
+                    <span id="conf-val-label" class="slider-value">0.50</span>
+                  </div>
+                  <div class="slider-container">
+                    <input type="range" id="conf-slider" class="slider-input" min="0.10" max="1.00" step="0.05" value="0.50">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Up & Down Stack (40% width) -->
+          <div class="side-panels-column">
+
+            <!-- Top Half: Statistical Visualization (Updates in real-time) -->
+            <div class="analytics-card">
+              <div class="analytics-header">
+                <div class="analytics-header-left">
+                  <h3>Live Analytics</h3>
+                  <span class="analytics-header-sub">Real-time compliance stats</span>
+                </div>
+              </div>
+
+              <div class="analytics-body-wrapper">
+                
+                <!-- Left Sub-column: Compliance Gauge & KPI Cards -->
+                <div class="analytics-col analytics-col-left">
+                  <!-- Compliance Health Score Gauge -->
+                  <div class="stats-gauge-panel">
+                    <div class="gauge-ring-container">
+                      <svg class="gauge-ring-svg" viewBox="0 0 100 100">
+                        <circle class="gauge-bg-circle" cx="50" cy="50" r="40" />
+                        <circle class="gauge-bar-circle" id="gauge-bar-circle" cx="50" cy="50" r="40" />
+                      </svg>
+                      <div class="gauge-center-content">
+                        <span class="gauge-score-value" id="stat-compliance-rate">94%</span>
+                        <span class="gauge-score-label">Compliance</span>
+                      </div>
+                    </div>
+                    <div class="gauge-status-tag" id="stat-compliance-status">
+                      <span id="stat-compliance-status-text">Good Compliance</span>
+                    </div>
+                  </div>
+
+                  <!-- Key Metrics 3-Item Grid -->
+                  <div class="stats-kpi-grid">
+                    <div class="kpi-mini-card">
+                      <span class="kpi-label">Total Logs</span>
+                      <span class="kpi-val" id="stat-kpi-total">634</span>
+                    </div>
+                    <div class="kpi-mini-card">
+                      <span class="kpi-label">Today</span>
+                      <span class="kpi-val" id="stat-kpi-today">97</span>
+                    </div>
+                    <div class="kpi-mini-card" id="kpi-card-active">
+                      <span class="kpi-label">Active Now</span>
+                      <span class="kpi-val" id="stat-kpi-active">0</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Sub-column: Category Breakdown & Activity Trend -->
+                <div class="analytics-col analytics-col-right">
+                  <!-- Violation Category Breakdown Progress Bars -->
+                  <div class="stats-section-block">
+                    <div class="stats-section-header">
+                      <h4>Category Breakdown</h4>
+                      <span class="stats-section-sub" id="stat-cat-total-label">634 Incidents</span>
+                    </div>
+
+                    <div class="cat-bars-list">
+                      <!-- No Apron -->
+                      <div class="cat-bar-item">
+                        <div class="cat-bar-labels">
+                          <span class="cat-name">No Apron</span>
+                          <span class="cat-nums"><strong id="stat-count-apron">284</strong> (<span id="stat-pct-apron">45%</span>)</span>
+                        </div>
+                        <div class="cat-progress-track">
+                          <div class="cat-progress-fill apron" id="stat-fill-apron" style="width: 45%;"></div>
+                        </div>
+                      </div>
+
+                      <!-- No Hairnet -->
+                      <div class="cat-bar-item">
+                        <div class="cat-bar-labels">
+                          <span class="cat-name">No Hairnet</span>
+                          <span class="cat-nums"><strong id="stat-count-hairnet">264</strong> (<span id="stat-pct-hairnet">42%</span>)</span>
+                        </div>
+                        <div class="cat-progress-track">
+                          <div class="cat-progress-fill hairnet" id="stat-fill-hairnet" style="width: 42%;"></div>
+                        </div>
+                      </div>
+
+                      <!-- No Gloves -->
+                      <div class="cat-bar-item">
+                        <div class="cat-bar-labels">
+                          <span class="cat-name">No Gloves</span>
+                          <span class="cat-nums"><strong id="stat-count-gloves">86</strong> (<span id="stat-pct-gloves">13%</span>)</span>
+                        </div>
+                        <div class="cat-progress-track">
+                          <div class="cat-progress-fill gloves" id="stat-fill-gloves" style="width: 13%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Hourly Trend Activity Chart -->
+                  <div class="stats-section-block">
+                    <div class="stats-section-header">
+                      <h4>Activity Trend</h4>
+                      <span class="stats-section-sub">Hourly distribution</span>
+                    </div>
+                    <div class="hourly-chart-container" id="hourly-chart-bars">
+                      <!-- Generated dynamically in script.js -->
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Bottom Half: Recent Detections (Only violation occurred with timestamp) -->
+            <div class="recent-detections-card">
+              <div class="recent-detections-header">
+                <div class="recent-header-left">
+                  <h3>Recent Detections</h3>
+                  <span class="recent-header-sub">Live violation stream</span>
+                </div>
+                <span class="recent-badge-pill" id="recent-live-pill">Live Feed</span>
+              </div>
+
+              <div class="recent-detections-list-wrapper">
+                <div class="recent-detections-list" id="recent-detections-list">
+                  <!-- Dynamically populated: only violation occurred + timestamp -->
+                  <div class="recent-loading-placeholder">
+                    <div class="spinner-small"></div>
+                    <span>Waiting for detections...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+    </div>
+
+    <!-- ========================================================
+         TAB 2: VIOLATION HISTORY (Dedicated Tab & View)
+         ======================================================== -->
+    <div class="tab-pane" id="tab-pane-history" style="display: none;">
+      
+      <section class="history-view-container">
+        
+        <!-- Top Toolbar Card: Title + Filter Pills + View Mode Switcher -->
+        <div class="history-toolbar-card">
+          <div class="history-toolbar-top">
+            <div class="history-heading">
+              <div class="history-heading-title-row">
+                <h2 class="history-title">Violation History</h2>
+                <span class="history-total-pill" id="history-total-pill">Loading...</span>
+              </div>
+              <p class="history-subtitle">Visual incident logs of kitchen hygiene compliance recorded by YOLO AI vision</p>
+            </div>
+            
+            <div class="history-toolbar-actions">
+              <!-- View Toggle (Grid / List) -->
+              <div class="view-toggle-group">
+                <button class="btn-toggle active" id="btn-view-grid" title="Cards Grid View" aria-label="Grid View">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                  </svg>
+                  <span>Cards</span>
+                </button>
+                <button class="btn-toggle" id="btn-view-list" title="Compact List View" aria-label="List View">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                  </svg>
+                  <span>Table</span>
+                </button>
+              </div>
+
+              <button class="btn btn-secondary btn-refresh-sm" id="btn-refresh-history" title="Refresh database logs">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Interactive Filter Pills with Live Database Counters -->
+          <div class="history-filter-strip">
+            <span class="filter-strip-label">Filter:</span>
+            <div class="filter-pills-list" role="tablist">
+              <button class="filter-pill active" data-filter="all">
+                <span>All Violations</span>
+                <span class="pill-count" id="count-pill-all">634</span>
+              </button>
+              <button class="filter-pill" data-filter="no_apron">
+                <span>No Apron</span>
+                <span class="pill-count" id="count-pill-apron">284</span>
+              </button>
+              <button class="filter-pill" data-filter="no_hairnet">
+                <span>No Hairnet</span>
+                <span class="pill-count" id="count-pill-hairnet">264</span>
+              </button>
+              <button class="filter-pill" data-filter="no_gloves">
+                <span>No Gloves</span>
+                <span class="pill-count" id="count-pill-gloves">86</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Evidence Gallery Content Area -->
+        <div class="evidence-content-area" id="evidence-content-area">
+          <div class="evidence-grid" id="evidence-container">
+            <div class="history-loading-state">
+              <div class="spinner-small"></div>
+              <span>Loading violation logs and visual snapshots...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section Footer -->
+        <div class="history-status-footer">
+          <span class="footer-tip">Click on any evidence photo to view full-resolution inspection snapshot</span>
+          <span class="footer-status" id="history-footer-status">Showing recent events</span>
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- Evidence Snapshot Modal -->
+  <div class="modal-overlay" id="modal-evidence">
+    <div class="modal-box" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3 id="evidence-title">Violation Evidence Snapshot</h3>
+        <button class="close-modal-btn" data-close="modal-evidence">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align: center;">
+        <img id="evidence-img" src="" alt="Evidence Snapshot" style="max-width: 100%; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <div id="evidence-details" style="margin-top: 14px; font-size: 0.875rem; color: #4b5563;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- JavaScript -->
+  <script src="script.js"></script>
+</body>
+</html>

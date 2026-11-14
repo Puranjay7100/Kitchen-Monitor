@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+ultralytics
+opencv-python
+numpy
+python-dotenv
+requests
+psycopg2-binary
+boto3
