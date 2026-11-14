@@ -5,6 +5,7 @@ FastAPI server serving HTML/CSS/JS frontend and real-time YOLO vision pipeline.
 
 import os
 import time
+import json
 import threading
 import glob
 import asyncio
