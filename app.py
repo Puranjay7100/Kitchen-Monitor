@@ -549,9 +549,18 @@ async def api_set_confidence(req: ConfRequest):
     vision.set_confidence(req.confidence)
     return {"status": "ok", "confidence": vision.confidence}
 
-@app.get("/api/status")
-async def api_status():
-    placeholders = ",".join(["%s"] * len(VIOLATIONS))
+# In-memory cache for status statistics to avoid repetitive remote Supabase queries
+_status_cache = None
+_status_cache_time = 0.0
+_status_cache_lock = threading.Lock()
+
+def get_cached_status_stats():
+    global _status_cache, _status_cache_time
+    now = time.time()
+    with _status_cache_lock:
+        if _status_cache is not None and (now - _status_cache_time < 3.0):
+            return _status_cache
+
     counts = {"all": 0}
     today_cnt = 0
     hourly_data = []
@@ -559,14 +568,23 @@ async def api_status():
     try:
         with get_db() as conn:
             with conn.cursor() as cursor:
-                # Total and category counts
-                for v in VIOLATIONS:
-                    cursor.execute("SELECT count(*) FROM violations WHERE violation = %s;", (v,))
-                    cnt = cursor.fetchone()[0]
-                    counts[v] = cnt
+                # 1 single query for all category counts
+                cursor.execute("""
+                    SELECT violation, count(*) 
+                    FROM violations 
+                    WHERE violation IN ('no_apron', 'no_gloves', 'no_hairnet')
+                    GROUP BY violation;
+                """)
+                for row in cursor.fetchall():
+                    v_name, cnt = row[0], row[1]
+                    counts[v_name] = cnt
                     counts["all"] += cnt
+                for v in VIOLATIONS:
+                    if v not in counts:
+                        counts[v] = 0
 
-                # Today's violation count
+                # Today's count
+                placeholders = ",".join(["%s"] * len(VIOLATIONS))
                 cursor.execute(f"""
                     SELECT count(*) FROM violations 
                     WHERE violation IN ({placeholders}) 
@@ -575,7 +593,7 @@ async def api_status():
                 row = cursor.fetchone()
                 today_cnt = row[0] if row else 0
 
-                # Recent hourly trend
+                # Hourly trend
                 cursor.execute(f"""
                     SELECT substr(timestamp, 12, 2) as hr, count(*) 
                     FROM violations 
@@ -587,15 +605,28 @@ async def api_status():
                 hourly_rows = cursor.fetchall()
                 hourly_rows.reverse()
                 hourly_data = [{"hour": f"{r[0]}:00", "count": r[1]} for r in hourly_rows]
+
+        with _status_cache_lock:
+            _status_cache = (counts, today_cnt, hourly_data)
+            _status_cache_time = now
     except Exception as e:
         print(f"Error reading status from Supabase: {e}")
+        with _status_cache_lock:
+            if _status_cache is not None:
+                return _status_cache
+
+    return counts, today_cnt, hourly_data
+
+@app.get("/api/status")
+async def api_status():
+    counts, today_cnt, hourly_data = get_cached_status_stats()
 
     return {
         "running": vision.running,
         "source": vision.source,
         "confidence": vision.confidence,
         "active_violations": vision.active_violations,
-        "fps": vision.fps,
+        "fps": round(vision.fps, 1),
         "total_violations": counts["all"],
         "counts": counts,
         "today_violations": today_cnt,

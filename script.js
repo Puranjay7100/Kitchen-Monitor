@@ -428,12 +428,15 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAnalyticsDisplay(data);
   }
 
+  let consecutiveStatusFailures = 0;
+
   // Periodic Backend Polling (Runs continuously in background)
   async function pollStatus() {
     try {
-      const res = await fetch(getApiUrl('/api/status'), { signal: AbortSignal.timeout(2500) });
+      const res = await fetch(getApiUrl('/api/status'), { signal: AbortSignal.timeout(6000) });
       if (res.ok) {
         const data = await res.json();
+        consecutiveStatusFailures = 0;
         const wasOffline = !backendOnline;
         backendOnline = true;
         if (streamConnectionBadge) {
@@ -458,20 +461,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
       }
     } catch (e) {
-      // Backend offline or timeout
+      // Backend timeout or transient drop
     }
-    backendOnline = false;
-    if (streamConnectionBadge) {
-      streamConnectionBadge.textContent = 'Offline';
-      streamConnectionBadge.style.color = '#9ca3af';
+    consecutiveStatusFailures++;
+    if (consecutiveStatusFailures >= 2) {
+      backendOnline = false;
+      if (streamConnectionBadge) {
+        streamConnectionBadge.textContent = 'Offline';
+        streamConnectionBadge.style.color = '#9ca3af';
+      }
     }
     return false;
   }
 
   function startContinuousPolling() {
     if (globalPollInterval) clearInterval(globalPollInterval);
-    // Poll status every 1.5 seconds continuously
-    globalPollInterval = setInterval(pollStatus, 1500);
+    // Poll status every 2 seconds continuously
+    globalPollInterval = setInterval(pollStatus, 2000);
 
     // Keep violation history refreshed automatically when tab is open
     if (historyPollInterval) clearInterval(historyPollInterval);
