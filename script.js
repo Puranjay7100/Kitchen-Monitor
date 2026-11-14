@@ -213,43 +213,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'image/jpeg' },
                 body: blob
               });
-              if (res.ok) {
-                const fpsHeader = res.headers.get('X-FPS');
-                if (fpsHeader && videoFps) {
-                  videoFps.textContent = `FPS: ${fpsHeader}`;
-                }
+              if (!res.ok) {
+                const errorText = await res.text();
+                console.error('[FRAME PROCESSING ERROR]', res.status, errorText);
+                return;
+              }
+              const fpsHeader = res.headers.get('X-FPS');
+              if (fpsHeader && videoFps) {
+                videoFps.textContent = `FPS: ${fpsHeader}`;
+              }
 
-                const violationsHeader = res.headers.get('X-Violations');
-                const boxesHeader = res.headers.get('X-Boxes');
+              const violationsHeader = res.headers.get('X-Violations');
+              const boxesHeader = res.headers.get('X-Boxes');
 
-                if (boxesHeader && overlayCtx && clientDetectionCanvas) {
-                  try {
-                    const boxes = JSON.parse(boxesHeader);
-                    overlayCtx.clearRect(0, 0, clientDetectionCanvas.width, clientDetectionCanvas.height);
-                    boxes.forEach(item => {
-                      const [x1, y1, x2, y2] = item.box;
-                      const isViol = item.violation;
-                      const strokeColor = isViol ? '#ef4444' : '#10b981';
-                      overlayCtx.lineWidth = 2.5;
-                      overlayCtx.strokeStyle = strokeColor;
-                      overlayCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+              if (boxesHeader && overlayCtx && clientDetectionCanvas) {
+                try {
+                  const boxes = JSON.parse(boxesHeader);
+                  overlayCtx.clearRect(0, 0, clientDetectionCanvas.width, clientDetectionCanvas.height);
+                  boxes.forEach(item => {
+                    const [x1, y1, x2, y2] = item.box;
+                    const isViol = item.violation;
+                    const strokeColor = isViol ? '#ef4444' : '#10b981';
+                    overlayCtx.lineWidth = 2.5;
+                    overlayCtx.strokeStyle = strokeColor;
+                    overlayCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
-                      overlayCtx.fillStyle = strokeColor;
-                      overlayCtx.font = 'bold 13px Inter, sans-serif';
-                      const text = `${item.label}: ${item.score.toFixed(2)}`;
-                      const textWidth = overlayCtx.measureText(text).width;
-                      overlayCtx.fillRect(x1, Math.max(0, y1 - 20), textWidth + 8, 20);
+                    overlayCtx.fillStyle = strokeColor;
+                    overlayCtx.font = 'bold 13px Inter, sans-serif';
+                    const text = `${item.label}: ${item.score.toFixed(2)}`;
+                    const textWidth = overlayCtx.measureText(text).width;
+                    overlayCtx.fillRect(x1, Math.max(0, y1 - 20), textWidth + 8, 20);
 
-                      overlayCtx.fillStyle = '#ffffff';
-                      overlayCtx.fillText(text, x1 + 4, Math.max(14, y1 - 5));
-                    });
-                  } catch (e) {
-                    console.error('Error drawing bounding boxes:', e);
-                  }
+                    overlayCtx.fillStyle = '#ffffff';
+                    overlayCtx.fillText(text, x1 + 4, Math.max(14, y1 - 5));
+                  });
+                } catch (e) {
+                  console.error('Error drawing bounding boxes:', e);
                 }
               }
             } catch (err) {
-              // Frame transport catch
+              console.error('[CLIENT FRAME SEND ERROR]', err);
             } finally {
               isSendingFrame = false;
             }
@@ -257,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
           isSendingFrame = false;
         }
-      }, 100); // 10 FPS real-time YOLO analysis
+      }, 250); // 4 FPS for CPU-friendly inference without overloading Render
 
       return true;
     } catch (err) {

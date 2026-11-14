@@ -30,7 +30,8 @@ from pydantic import BaseModel
 import uvicorn
 
 # Configuration
-MODEL_PATH = "best_40.pt"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "best_40.pt")
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres.lgqdpkkxvzghbrbieyct:The_Neotia_University@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
@@ -131,18 +132,24 @@ def get_model():
     global model
     with model_lock:
         if model is None:
-            print(f"Loading YOLO model from {MODEL_PATH}...")
+            print(f"[YOLO] Loading model from: {MODEL_PATH}", flush=True)
+            if not os.path.isfile(MODEL_PATH):
+                print(f"[YOLO ERROR] Model file not found at: {MODEL_PATH}", flush=True)
+                raise FileNotFoundError(f"YOLO model not found at: {MODEL_PATH}")
             try:
                 from ultralytics import YOLO
-                model = YOLO(MODEL_PATH)
-                # Warm up model forward pass so live inference runs immediately in ~30ms
-                dummy = np.zeros((64, 64, 3), dtype=np.uint8)
-                model(dummy, verbose=False)
-                print(f"Model loaded and warmed successfully with classes: {model.names}")
+                loaded = YOLO(MODEL_PATH)
+                # Verify CPU warmup inference
+                dummy = np.zeros((320, 320, 3), dtype=np.uint8)
+                loaded.predict(dummy, imgsz=320, device="cpu", verbose=False)
+                model = loaded
+                print(f"[YOLO] MODEL LOADED SUCCESSFULLY", flush=True)
+                print(f"[YOLO] CLASSES: {model.names}", flush=True)
             except Exception as e:
-                print(f"Warning: Could not load YOLO model ({e}). Will run in simulated mode.")
-                model = False
-    return model if model is not False else None
+                print(f"[YOLO LOAD EXCEPTION] Failed to load YOLO: {e}", flush=True)
+                # Do NOT permanently cache failure as False; leave as None so future requests can retry
+                raise e
+    return model
 
 # Thread-safe Camera & Vision Pipeline Manager
 class VisionManager:
@@ -235,7 +242,8 @@ class VisionManager:
 
         if yolo_model is not None and frame is not None:
             try:
-                results = yolo_model.predict(frame, conf=conf, verbose=False)
+                # Run YOLO CPU inference with explicit imgsz and conf
+                results = yolo_model.predict(frame, conf=conf, imgsz=416, device="cpu", verbose=False)
                 for result in results:
                     for box in result.boxes:
                         class_id = int(box.cls[0])
@@ -280,7 +288,8 @@ class VisionManager:
                                 self._save_violation_record(name, score, frame)
                                 self.last_saved[name] = now
             except Exception as infer_err:
-                print(f"Inference error: {infer_err}")
+                print(f"[YOLO INFERENCE ERROR] {repr(infer_err)}", flush=True)
+                raise infer_err
 
         with self.lock:
             self.active_violations = sorted(list(set(current_detected)))
