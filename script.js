@@ -400,10 +400,23 @@ document.addEventListener('DOMContentLoaded', () => {
       stopLocalWebcamMonitoring();
       stopClientFallbackStream();
       if (videoStream) {
+        videoStream.style.display = 'none';
         videoStream.classList.remove('active');
-        videoStream.src = '';
+        videoStream.removeAttribute('src');
       }
-      if (videoPlaceholder) videoPlaceholder.style.display = 'flex';
+      if (clientWebcamPreview) {
+        clientWebcamPreview.style.display = 'none';
+        clientWebcamPreview.classList.remove('active');
+        clientWebcamPreview.srcObject = null;
+      }
+      if (clientDetectionCanvas) {
+        clientDetectionCanvas.style.display = 'none';
+        const ctx = clientDetectionCanvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, clientDetectionCanvas.width, clientDetectionCanvas.height);
+      }
+      if (videoPlaceholder) {
+        videoPlaceholder.style.display = 'flex';
+      }
 
       if (monitorStatusBadge) monitorStatusBadge.className = 'status-pill stopped';
       if (monitorStatusText) monitorStatusText.textContent = 'STANDBY';
@@ -535,7 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let html = '';
 
     items.forEach((item, index) => {
-      const heightPercent = Math.max(12, Math.round((item.count / maxCount) * 100));
+      const heightPercent = Math.max(18, Math.round((item.count / maxCount) * 100));
       const isPeak = item.count === maxCount;
       const isCurrent = index === items.length - 1;
       let barClass = 'hourly-bar';

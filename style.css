@@ -610,6 +610,9 @@ body {
   position: relative;
   width: 90px;
   height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .gauge-ring-svg {
@@ -636,11 +639,16 @@ body {
 
 .gauge-center-content {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 60px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .gauge-score-value {
@@ -850,8 +858,9 @@ body {
   align-items: flex-end;
   justify-content: space-between;
   gap: 6px;
-  height: 56px;
-  padding-top: 4px;
+  height: 75px;
+  min-height: 70px;
+  padding-top: 8px;
   flex: 1;
 }
 
@@ -862,13 +871,14 @@ body {
   align-items: center;
   height: 100%;
   justify-content: flex-end;
-  gap: 3px;
+  gap: 4px;
 }
 
 .hourly-bar-wrap {
   width: 100%;
   max-width: 20px;
   flex: 1;
+  height: 100%;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -876,7 +886,7 @@ body {
 
 .hourly-bar {
   width: 100%;
-  min-height: 4px;
+  min-height: 8px;
   background-color: #ab6446;
   border-radius: 3px 3px 0 0;
   transition: height 0.3s ease;
@@ -2303,8 +2313,12 @@ body {
   }
 
   .gauge-ring-container {
-    width: 80px;
-    height: 80px;
+    width: 86px;
+    height: 86px;
+  }
+
+  .gauge-center-content {
+    width: 58px;
   }
 
   .gauge-score-value {
@@ -2312,7 +2326,8 @@ body {
   }
 
   .gauge-score-label {
-    font-size: 0.5rem;
+    font-size: 0.48rem;
+    letter-spacing: 0.1px;
   }
 
   .gauge-status-tag {
@@ -2346,7 +2361,12 @@ body {
   }
 
   .hourly-chart-container {
-    height: 48px;
+    height: 70px;
+    min-height: 65px;
+  }
+
+  .hourly-bar-wrap {
+    height: 100%;
   }
 
   .recent-detections-list-wrapper {
