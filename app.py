@@ -9,9 +9,15 @@ import json
 import threading
 import glob
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from contextlib import contextmanager
+
+# Indian Standard Time (IST) UTC+05:30
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist_now():
+    return datetime.now(IST_TZ)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -361,9 +367,10 @@ class VisionManager:
 
     def _upload_and_save_violation(self, name: str, confidence: float, frame_copy):
         try:
-            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            now_ist = get_ist_now()
+            timestamp_str = now_ist.strftime("%Y%m%d_%H%M%S")
             filename = f"{name}_{timestamp_str}.jpg"
-            now_formatted = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now_formatted = now_ist.strftime("%Y-%m-%d %H:%M:%S")
 
             # Encode frame to JPEG
             ret, buf = cv2.imencode('.jpg', frame_copy, [cv2.IMWRITE_JPEG_QUALITY, 85])
