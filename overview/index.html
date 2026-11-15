@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mother's Hut - Master Operations Timeline (30-Min View)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top App Navigation Bar -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-section">
+        <div class="brand-logo-badge">
+          <span>MH</span>
+        </div>
+        <div>
+          <h1 class="brand-title">Mother's Hut</h1>
+          <p class="brand-sub">Master Operations Timeline</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="refreshBtn" class="action-btn" title="Refresh Latest Metrics">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.19"/>
+          </svg>
+          <span>Sync</span>
+        </button>
+        <button id="themeToggleBtn" class="action-btn" title="Toggle Light / Dark Mode">
+          <span id="themeIcon">☀️</span>
+          <span id="themeText">Light</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-wrapper">
+
+    <!-- Page Title & Live Status -->
+    <div class="hero-box">
+      <div class="hero-pill-badge">
+        <span class="live-pulse-dot"></span>
+        <span>30-Minute Aggregated Master Feed</span>
+      </div>
+      <h1>Restaurant Activity Timeline</h1>
+      <p>Averaged across 30-minute operational intervals — correlating vehicle occupancy, food order volume, vision hygiene compliance, and meal quality.</p>
+    </div>
+
+    <!-- Quick Stats Strip (Current 30-Min Snapshot) -->
+    <div class="metrics-strip">
+      <div class="metric-pill">
+        <div class="pill-label">Avg Parked Vehicles</div>
+        <div id="statVehicles" class="pill-value">--</div>
+        <div class="pill-note">Current 30-min window</div>
+      </div>
+      <div class="metric-pill">
+        <div class="pill-label">Total Orders</div>
+        <div id="statOrders" class="pill-value">--</div>
+        <div class="pill-note">Order volume</div>
+      </div>
+      <div class="metric-pill">
+        <div class="pill-label">Avg Hygiene Score</div>
+        <div id="statHygiene" class="pill-value">--%</div>
+        <div class="pill-note">Vision AI compliance</div>
+      </div>
+      <div class="metric-pill">
+        <div class="pill-label">Avg Food Quality</div>
+        <div id="statQuality" class="pill-value">--%</div>
+        <div class="pill-note">Kitchen rating</div>
+      </div>
+    </div>
+
+    <!-- Production Filtering & Search Toolbar -->
+    <div class="controls-card">
+      <div class="controls-grid">
+        <!-- Search Input -->
+        <div class="search-input-box">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search by time (e.g. 12:00 PM, 6:30, Nov 15)...">
+        </div>
+
+        <!-- Date Filter Dropdown -->
+        <select id="dateFilter" class="filter-select" aria-label="Select Date">
+          <option value="">All Available Dates</option>
+        </select>
+
+        <!-- Compliance / Quality Score Filter -->
+        <select id="scoreFilter" class="filter-select" aria-label="Filter by Compliance">
+          <option value="all">All Hygiene Scores</option>
+          <option value="high">High Compliance (≥ 90%)</option>
+          <option value="warning">Moderate (75% - 89%)</option>
+          <option value="critical">Critical Alert (&lt; 75%)</option>
+        </select>
+
+        <!-- Reset Button -->
+        <button id="resetFiltersBtn" class="clear-btn" title="Reset all filters">Reset</button>
+      </div>
+
+      <!-- Active Filter Status Indicator -->
+      <div class="filter-status-row">
+        <div>
+          <span>Showing: </span>
+          <span id="activeFilterSummary" class="status-highlight-badge">Initial View: 10 Intervals (5.0 Hours)</span>
+        </div>
+        <div id="recordsCountText">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Timeline Section Header -->
+    <div class="timeline-header-row">
+      <h2>Recorded 30-Minute Timeline</h2>
+      <span id="hoursCoverageTag" class="hours-coverage-tag">5.0 Hours Per Page</span>
+    </div>
+
+    <!-- Timeline Feed Container -->
+    <div id="timelineList" class="timeline-feed">
+      <div class="state-box">
+        <div class="loading-spinner"></div>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">Connecting to Master Database and calculating 30-min averages...</p>
+      </div>
+    </div>
+
+    <!-- Pagination Controls (10 records = 5 Hours per page) -->
+    <div class="pagination-bar">
+      <div id="paginationInfo" class="pagination-info">Showing page 1 of 1</div>
+      <div class="pagination-buttons">
+        <button id="prevPageBtn" class="page-btn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          <span>Previous 5 Hours</span>
+        </button>
+        <span id="pageIndicator" class="page-number-indicator">1</span>
+        <button id="nextPageBtn" class="page-btn" disabled>
+          <span>Next 5 Hours</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Sticky Bottom Status Toast -->
+  <div class="sync-status-bar">
+    <span>🗄️</span>
+    <span id="syncStatusText">Connecting to Master DB...</span>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
