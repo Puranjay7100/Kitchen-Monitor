@@ -44,6 +44,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("Missing required environment variable: DATABASE_URL")
 
+# Shared Central Master Database URL (for syncing 5-minute metrics into master_metrics)
+MASTER_DATABASE_URL = os.getenv(
+    "MASTER_DATABASE_URL",
+    "postgresql://postgres.vmdxwszdawcdluaignpl:The_Neotia_Uni@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
+)
+
 # Supabase S3 Storage Configuration (loaded from Render Environment Variables or local .env)
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 S3_REGION = os.getenv("S3_REGION", "ap-northeast-2")
@@ -409,8 +415,36 @@ class VisionManager:
                         )
                     )
             print(f"[VIOLATION RECORDED] {name} ({confidence:.2f}) -> Supabase Storage: {image_url}")
+
+            # Immediately update Master Metrics table in runtime
+            self._sync_runtime_master_metrics()
         except Exception as ex:
             print(f"Error saving violation to Supabase Storage: {ex}")
+
+    def _sync_runtime_master_metrics(self):
+        try:
+            now_ist = get_ist_now()
+            # Pure local IST timestamp without timezone offset
+            window_start = now_ist.replace(minute=(now_ist.minute // 5) * 5, second=0, microsecond=0, tzinfo=None)
+            active_count = len(self.active_violations)
+            score = max(55.0, 95.0 - (active_count * 18.0)) if active_count > 0 else 96.5
+
+            upsert_sql = """
+            INSERT INTO master_metrics (window_start, hygiene_score)
+            VALUES (%s, %s)
+            ON CONFLICT (window_start)
+            DO UPDATE SET hygiene_score = EXCLUDED.hygiene_score;
+            """
+            conn = psycopg2.connect(MASTER_DATABASE_URL, connect_timeout=10)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(upsert_sql, (window_start, round(score, 2)))
+                conn.commit()
+                print(f"[MASTER RUNTIME SYNC] Live detection updated master_metrics: window={window_start.strftime('%H:%M')} IST, score={round(score, 2)}%")
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[MASTER RUNTIME SYNC WARNING] {e}")
 
     def _save_violation_record(self, name: str, confidence: float, frame):
         # Asynchronously upload in background thread so live 30 FPS video never stutters
@@ -590,6 +624,52 @@ def ensure_sample_evidence_frames():
         except Exception as e:
             print(f"[STORAGE WARNING] Could not sync frames from Supabase: {e}")
 
+# Master Metrics Sync: Background service periodically syncing 5-min hygiene score to master_metrics
+def sync_hygiene_to_master():
+    """
+    Runs continuously in a daemon thread.
+    Every 5 minutes, computes the recent hygiene compliance score and upserts it
+    into the shared master_metrics table using window_start.
+    """
+    print("[MASTER SYNC] Initialized 5-minute Master Metrics sync worker.")
+    while True:
+        try:
+            now = get_ist_now()
+            # Calculate 5-minute window_start in pure local IST time (e.g. 17:00, 17:05, 17:10)
+            window_start = now.replace(minute=(now.minute // 5) * 5, second=0, microsecond=0, tzinfo=None)
+
+            # Calculate current hygiene score:
+            # If camera is running and there are active violations, deduct from 95; otherwise 96.5 (or standby 94.0)
+            active_count = len(vision.active_violations)
+            if active_count > 0:
+                score = max(55.0, 95.0 - (active_count * 18.0))
+            elif vision.running:
+                score = 96.5
+            else:
+                score = 94.0
+
+            upsert_sql = """
+            INSERT INTO master_metrics (window_start, hygiene_score)
+            VALUES (%s, %s)
+            ON CONFLICT (window_start)
+            DO UPDATE SET hygiene_score = EXCLUDED.hygiene_score;
+            """
+
+            conn = psycopg2.connect(MASTER_DATABASE_URL, connect_timeout=10)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(upsert_sql, (window_start, round(score, 2)))
+                conn.commit()
+                print(f"[MASTER SYNC] Synced hygiene_score={round(score, 2)}% for window {window_start.strftime('%H:%M')} IST")
+            finally:
+                conn.close()
+
+        except Exception as err:
+            print(f"[MASTER SYNC WARNING] Could not sync to master_metrics: {err}")
+
+        # Sleep for 60 seconds before next check
+        time.sleep(60)
+
 # FastAPI application
 app = FastAPI(title="Kitchen Hygiene Compliance Monitoring - Mother's Hut")
 
@@ -598,6 +678,7 @@ async def on_startup():
     print("[STARTUP] Pre-warming YOLO AI Model in background...")
     threading.Thread(target=get_model, daemon=True).start()
     threading.Thread(target=ensure_sample_evidence_frames, daemon=True).start()
+    threading.Thread(target=sync_hygiene_to_master, daemon=True).start()
 
 app.add_middleware(
     CORSMiddleware,
