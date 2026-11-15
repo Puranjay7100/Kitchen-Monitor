@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   boxes.forEach(item => {
                     const [x1, y1, x2, y2] = item.box;
                     const isViol = item.violation;
-                    const strokeColor = isViol ? '#ef4444' : '#10b981';
+                    const strokeColor = isViol ? '#9B221E' : '#1F8A4D';
                     overlayCtx.lineWidth = 2.5;
                     overlayCtx.strokeStyle = strokeColor;
                     overlayCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
@@ -487,11 +487,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const offset = circumference - (circumference * (compliancePct / 100));
       gaugeBarCircle.style.strokeDashoffset = offset;
       if (activeCount > 0) {
-        gaugeBarCircle.style.stroke = '#b91c1c';
+        gaugeBarCircle.style.stroke = '#9B221E';
       } else if (compliancePct >= 90) {
-        gaugeBarCircle.style.stroke = '#047857';
+        gaugeBarCircle.style.stroke = '#5A0D14';
       } else {
-        gaugeBarCircle.style.stroke = '#c2410c';
+        gaugeBarCircle.style.stroke = '#D39229';
       }
     }
 
@@ -628,10 +628,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (streamConnectionBadge) {
           if (isUsingClientCamera) {
             streamConnectionBadge.textContent = 'Camera Live';
-            streamConnectionBadge.style.color = '#10b981';
+            streamConnectionBadge.style.color = '#1F8A4D';
           } else {
             streamConnectionBadge.textContent = 'Connected';
-            streamConnectionBadge.style.color = '#10b981';
+            streamConnectionBadge.style.color = '#1F8A4D';
           }
         }
 
@@ -738,7 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : (cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath);
 
       html += `
-        <div class="recent-detection-row">
+        <div class="recent-detection-row" ${hasImage ? `onclick="viewEvidenceModal('${item.violation}', '${confPercent}%', '${item.timestamp || ''}', '${displayPath}')" title="Click to inspect snapshot"` : ''}>
           <div class="recent-row-left">
             <span class="violation-tag ${tagClass}">${formattedTitle}</span>
             <span class="recent-detection-time">
@@ -747,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </span>
           </div>
           ${hasImage ? `
-            <button class="btn-recent-view" onclick="viewEvidenceModal('${item.violation}', '${confPercent}%', '${item.timestamp || ''}', '${displayPath}')" title="View evidence snapshot">
+            <button class="btn-recent-view" onclick="event.stopPropagation(); viewEvidenceModal('${item.violation}', '${confPercent}%', '${item.timestamp || ''}', '${displayPath}')" title="View evidence snapshot">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               <span>View</span>
             </button>
@@ -962,7 +962,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : (cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath);
 
       rowsHtml += `
-        <tr>
+        <tr ${hasImage ? `onclick="viewEvidenceModal('${r.violation}', '${confPercent}%', '${r.timestamp || ''}', '${displayPath}')" title="Click row to inspect snapshot"` : ''}>
           <td style="width: 80px;">
             <div class="table-thumb-box" ${hasImage ? `onclick="viewEvidenceModal('${r.violation}', '${confPercent}%', '${r.timestamp || ''}', '${displayPath}')" title="Click to enlarge"` : ''}>
               ${hasImage
@@ -984,7 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td style="text-align: right;">
             ${hasImage
-              ? `<button class="btn-table-action" onclick="viewEvidenceModal('${r.violation}', '${confPercent}%', '${r.timestamp || ''}', '${displayPath}')">
+              ? `<button class="btn-table-action" onclick="event.stopPropagation(); viewEvidenceModal('${r.violation}', '${confPercent}%', '${r.timestamp || ''}', '${displayPath}')">
                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                    <span>View</span>
                  </button>`
@@ -1071,18 +1071,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Evidence Modal Handlers
   window.viewEvidenceModal = function(violation, conf, time, path) {
     const vtype = (violation || '').toLowerCase();
-    let violationColor = '#b91c1c';
-    if (vtype.includes('glove')) violationColor = '#4338ca';
-    else if (vtype.includes('hairnet')) violationColor = '#c2410c';
+    let violationColor = '#5A0D14';
+    if (vtype.includes('glove')) violationColor = '#6B1D1A';
+    else if (vtype.includes('hairnet')) violationColor = '#D39229';
 
     evidenceTitle.textContent = `Evidence Snapshot: ${formatViolationName(violation)}`;
     evidenceDetails.innerHTML = `
       <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 6px; font-weight: 600;">
         <span style="color: ${violationColor};">Violation: ${formatViolationName(violation)}</span>
-        <span style="color: #ab6446;">Confidence: ${conf}</span>
-        <span style="color: #94a3b8;">${time}</span>
+        <span style="color: #E5A73B;">Confidence: ${conf}</span>
+        <span style="color: #6B4C46;">${time}</span>
       </div>
-      <p style="font-size:0.75rem; color:#64748b; font-family: monospace;">File: ${path}</p>
+      <p style="font-size:0.75rem; color:#7A5448; font-family: monospace;">File: ${path}</p>
     `;
     evidenceImg.src = path;
     evidenceImg.onerror = function() {
